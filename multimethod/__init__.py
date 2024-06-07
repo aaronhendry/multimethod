@@ -46,6 +46,8 @@ class subtype(abc.ABCMeta):
             return object
         if hasattr(tp, '__supertype__'):  # isinstance(..., NewType) only supported >=3.10
             tp = tp.__supertype__
+        if (isinstance(tp, typing.TypeAliasType) or isinstance(tp, typing.GenericAlias)) and hasattr(tp, '__value__'):
+            tp = tp.__value__
         if isinstance(tp, TypeVar):
             if not tp.__constraints__:
                 return object
@@ -90,7 +92,7 @@ class subtype(abc.ABCMeta):
         if self.__origin__ is Literal:
             return False
         if self.__origin__ is Union:
-            return issubclass(subclass, self.__args__)
+            return any(issubclass(cls, subclass) for cls in self.__args__)
         if self.__origin__ is Callable:
             return (
                 origin is Callable
@@ -218,7 +220,9 @@ class signature(tuple):
         return cls(hints, required)
 
     def __le__(self, other: tuple) -> bool:
-        return self.required <= len(other) and all(map(issubclass, other, self))
+        return (self.required <= len(other) and
+                all([issubclass(sc[0], sc[1].__args__ if hasattr(sc[1], '__args__') else sc[1])
+                     for sc in zip(other, self)]))
 
     def __lt__(self, other: tuple) -> bool:
         return self != other and self <= other
